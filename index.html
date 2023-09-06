@@ -228,11 +228,24 @@
                 return typing_speed;
             }
 
+            const firebaseConfig = {
+                apiKey: "AIzaSyBIeguuap76yMjfF_gp7am83Eu7bVOC_Lw",
+                authDomain: "haerold-b6633.firebaseapp.com",
+                projectId: "haerold-b6633",
+                storageBucket: "haerold-b6633.appspot.com",
+                messagingSenderId: "174397733516",
+                appId: "1:174397733516:web:95126d0c4ff8630e58d9a9",
+                measurementId: "G-0Y533DL1PG",
+            };
+            // Firebase 초기화
+            firebase.initializeApp(firebaseConfig);
+
+            // Firebase Realtime Database 참조
+            var database = firebase.database();
+
+            // 결과 저장 및 업데이트 함수
             function saveResult() {
-                if (!start_time || !end_time) {
-                    resultDiv.innerHTML = "Error: Please complete the typing test first";
-                    return;
-                }
+                // 결과 데이터 생성
                 var student_id = document.getElementById("student-id").value;
                 var name = document.getElementById("name").value;
                 var typing_speed = calculateTypingSpeed(end_time - start_time);
@@ -242,35 +255,33 @@
                     typing_speed: typing_speed,
                 };
 
-                var transaction = db.transaction(["results"], "readwrite");
-                var objectStore = transaction.objectStore("results");
-                var request = objectStore.add(result);
-
-                request.onsuccess = function (event) {
-                    resultDiv.innerHTML = "Results saved successfully!";
-                    updateRankingHTML(); // 실시간으로 랭킹 HTML 업데이트
-                };
-
-                request.onerror = function (event) {
-                    resultDiv.innerHTML = "Error saving results";
-                };
+                // Firebase Realtime Database에 결과 저장
+                database.ref("results").push(result, function (error) {
+                    if (error) {
+                        console.log("Error saving results:", error);
+                    } else {
+                        console.log("Results saved successfully!");
+                        updateRankingHTML();
+                    }
+                });
             }
 
+            // 랭킹 업데이트 함수
             function updateRankingHTML() {
-                var transaction = db.transaction(["results"], "readonly");
-                var objectStore = transaction.objectStore("results");
-                var request = objectStore.openCursor();
-                var rankingData = [];
-                request.onsuccess = function (event) {
-                    var cursor = event.target.result;
-                    if (cursor) {
-                        rankingData.push(cursor.value);
-                        cursor.continue();
-                    } else {
-                        if (rankingData.length === 0) {
-                            rankingDiv.innerHTML = "No ranking data available";
-                            return;
-                        }
+                // Firebase Realtime Database에서 결과 가져오기
+                database
+                    .ref("results")
+                    .orderByChild("typing_speed")
+                    .limitToLast(10)
+                    .once("value", function (snapshot) {
+                        var rankingData = [];
+                        snapshot.forEach(function (childSnapshot) {
+                            var item = childSnapshot.val();
+                            rankingData.push(item);
+                        });
+
+                        // 랭킹 HTML 업데이트
+                        var rankingDiv = document.getElementById("ranking");
                         rankingDiv.innerHTML = "<h2>Ranking</h2>";
                         var rankingList = document.createElement("ul");
                         rankingData.forEach(function (item, index) {
@@ -286,8 +297,7 @@
                             rankingList.appendChild(listItem);
                         });
                         rankingDiv.appendChild(rankingList);
-                    }
-                };
+                    });
             }
 
             given_text = quotes[Math.floor(Math.random() * quotes.length)];
