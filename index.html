@@ -248,10 +248,45 @@
 
                 request.onsuccess = function (event) {
                     resultDiv.innerHTML = "Results saved successfully!";
+                    updateRankingHTML(); // 실시간으로 랭킹 HTML 업데이트
                 };
 
                 request.onerror = function (event) {
                     resultDiv.innerHTML = "Error saving results";
+                };
+            }
+
+            function updateRankingHTML() {
+                var transaction = db.transaction(["results"], "readonly");
+                var objectStore = transaction.objectStore("results");
+                var request = objectStore.openCursor();
+                var rankingData = [];
+                request.onsuccess = function (event) {
+                    var cursor = event.target.result;
+                    if (cursor) {
+                        rankingData.push(cursor.value);
+                        cursor.continue();
+                    } else {
+                        if (rankingData.length === 0) {
+                            rankingDiv.innerHTML = "No ranking data available";
+                            return;
+                        }
+                        rankingDiv.innerHTML = "<h2>Ranking</h2>";
+                        var rankingList = document.createElement("ul");
+                        rankingData.forEach(function (item, index) {
+                            var listItem = document.createElement("li");
+                            listItem.innerHTML = "Student ID: " + item.student_id + ", Name: " + item.name + ", Typing Speed: " + item.typing_speed + " WPM";
+                            if (index === 0) {
+                                listItem.classList.add("first");
+                            } else if (index === 1) {
+                                listItem.classList.add("second");
+                            } else if (index === 2) {
+                                listItem.classList.add("third");
+                            }
+                            rankingList.appendChild(listItem);
+                        });
+                        rankingDiv.appendChild(rankingList);
+                    }
                 };
             }
 
