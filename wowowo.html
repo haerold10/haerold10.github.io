@@ -33,6 +33,24 @@
                 color: red;
                 font-weight: bold;
             }
+            .ranking {
+                margin-top: 20px;
+            }
+            .ranking li {
+                list-style: none;
+            }
+            .ranking .first {
+                font-weight: bold;
+                color: red;
+            }
+            .ranking .second {
+                font-weight: bold;
+                color: blue;
+            }
+            .ranking .third {
+                font-weight: bold;
+                color: green;
+            }
         </style>
     </head>
     <body>
@@ -47,30 +65,47 @@
             <button type="button" id="start-button">Start</button>
             <button type="button" id="end-button">End</button>
             <button type="button" id="reset-button">Reset</button>
-            <!-- 재설정 버튼 -->
-            <button type="button" id="save-button">Save</button>
-            <!-- 저장 버튼 -->
+            <button type="button" id="show-ranking-button">Show Ranking</button>
         </form>
         <div id="sentence"></div>
-        <!-- 입력해야 할 문장 표시 -->
         <div id="result"></div>
         <div id="timer"></div>
+        <div id="ranking" class="ranking"></div>
+
         <script>
             var startButton = document.getElementById("start-button");
             var endButton = document.getElementById("end-button");
             var resetButton = document.getElementById("reset-button");
-            var saveButton = document.getElementById("save-button");
+            var showRankingButton = document.getElementById("show-ranking-button");
             var typingForm = document.getElementById("typing-form");
             var resultDiv = document.getElementById("result");
             var timerDiv = document.getElementById("timer");
             var sentenceDiv = document.getElementById("sentence");
+            var rankingDiv = document.getElementById("ranking");
             var start_time, end_time;
             var started = false;
-            var given_text = ""; // 입력해야 할 문장
-            var errorIndices = []; // 틀린 부분 인덱스 저장
-            sentenceDiv.innerHTML = ""; // 초기화
+            var given_text = "";
+            var errorIndices = [];
 
-            // 명언 목록
+            // IndexedDB 설정
+            var db;
+            var request = window.indexedDB.open("typingDB", 1);
+
+            request.onerror = function (event) {
+                console.log("IndexedDB error: " + event.target.errorCode);
+            };
+
+            request.onsuccess = function (event) {
+                db = event.target.result;
+            };
+
+            request.onupgradeneeded = function (event) {
+                db = event.target.result;
+                var objectStore = db.createObjectStore("results", { keyPath: "student_id" });
+                objectStore.createIndex("student_id", "student_id", { unique: true });
+            };
+
+            sentenceDiv.innerHTML = "";
             var quotes = [
                 "The only way to do great work is to love what you do. - Steve Jobs",
                 "In the middle of every difficulty lies opportunity. - Albert Einstein",
@@ -78,11 +113,8 @@
                 "Success is not final, failure is not fatal: It is the courage to continue that counts. - Winston Churchill",
                 "The journey of a thousand miles begins with one step. - Lao Tzu",
             ];
-
-            // 랜덤 명언 선택
             given_text = quotes[Math.floor(Math.random() * quotes.length)];
 
-            // 입력된 텍스트와 주어진 텍스트 비교하여 틀린 부분 표시
             function showErrors() {
                 var typed_text = document.getElementById("typed-text").value;
                 typed_text = typed_text.trim();
@@ -103,7 +135,6 @@
                 sentenceDiv.innerHTML = sentenceHTML;
             }
 
-            // 엔터 키 입력 시 타자 속도 측정
             document.getElementById("typed-text").addEventListener("keypress", function (event) {
                 if (!started) {
                     start_time = new Date();
@@ -116,11 +147,11 @@
                         resultDiv.innerHTML = "Error: Typed text does not match the given text";
                     } else {
                         resultDiv.innerHTML = "Typing Speed: " + calculateTypingSpeed(time) + " WPM";
+                        saveResult();
                     }
                 }
             });
 
-            // 종료 버튼 클릭 시 타자 속도 측정 및 결과 출력
             endButton.addEventListener("click", function () {
                 if (!start_time) {
                     resultDiv.innerHTML = "Error: Please click the Start button first";
@@ -137,8 +168,67 @@
                 resultDiv.innerHTML = "Your typing speed: " + calculateTypingSpeed(time_diff) + " WPM";
             });
 
-            // 저장 버튼 클릭 시 결과 저장
-            saveButton.addEventListener("click", function () {
+            showRankingButton.addEventListener("click", function () {
+                var transaction = db.transaction(["results"], "readonly");
+                var objectStore = transaction.objectStore("results");
+                var request = objectStore.openCursor();
+                var rankingData = [];
+                request.onsuccess = function (event) {
+                    var cursor = event.target.result;
+                    if (cursor) {
+                        rankingData.push(cursor.value);
+                        cursor.continue();
+                    } else {
+                        if (rankingData.length === 0) {
+                            rankingDiv.innerHTML = "No ranking data available";
+                            return;
+                        }
+                        rankingDiv.innerHTML = "<h2>Ranking</h2>";
+                        var rankingList = document.createElement("ul");
+                        rankingData.forEach(function (item, index) {
+                            var listItem = document.createElement("li");
+                            listItem.innerHTML = "Student ID: " + item.student_id + ", Name: " + item.name + ", Typing Speed: " + item.typing_speed + " WPM";
+                            if (index === 0) {
+                                listItem.classList.add("first");
+                            } else if (index === 1) {
+                                listItem.classList.add("second");
+                            } else if (index === 2) {
+                                listItem.classList.add("third");
+                            }
+                            rankingList.appendChild(listItem);
+                        });
+                        rankingDiv.appendChild(rankingList);
+                    }
+                };
+            });
+
+            resetButton.addEventListener("click", function () {
+                start_time = null;
+                end_time = null;
+                started = false;
+                document.getElementById("typed-text").value = "";
+                resultDiv.innerHTML = "";
+                timerDiv.innerHTML = "";
+                given_text = quotes[Math.floor(Math.random() * quotes.length)];
+                sentenceDiv.innerHTML = given_text;
+            });
+
+            setInterval(function () {
+                if (start_time && !end_time) {
+                    var current_time = new Date();
+                    var time_diff = current_time - start_time;
+                    timerDiv.innerHTML = "Timer: " + Math.floor(time_diff / 1000) + " seconds";
+                }
+            }, 1000);
+
+            function calculateTypingSpeed(time) {
+                var wordsTyped = document.getElementById("typed-text").value.trim().split(" ").length;
+                var minutes = time / 60000;
+                var typing_speed = Math.round(wordsTyped / minutes);
+                return typing_speed;
+            }
+
+            function saveResult() {
                 if (!start_time || !end_time) {
                     resultDiv.innerHTML = "Error: Please complete the typing test first";
                     return;
@@ -151,46 +241,20 @@
                     name: name,
                     typing_speed: typing_speed,
                 };
-                var jsonData = JSON.stringify(result);
-                var blob = new Blob([jsonData], { type: "application/json" });
-                var url = URL.createObjectURL(blob);
-                var a = document.createElement("a");
-                a.href = url;
-                a.download = "Result.json";
-                a.click();
-                resultDiv.innerHTML = "Results saved successfully!";
-            });
 
-            // 재설정 버튼 클릭 시 초기화
-            resetButton.addEventListener("click", function () {
-                start_time = null;
-                end_time = null;
-                started = false;
-                document.getElementById("typed-text").value = "";
-                resultDiv.innerHTML = "";
-                timerDiv.innerHTML = "";
-                given_text = quotes[Math.floor(Math.random() * quotes.length)];
-                sentenceDiv.innerHTML = given_text;
-            });
+                var transaction = db.transaction(["results"], "readwrite");
+                var objectStore = transaction.objectStore("results");
+                var request = objectStore.add(result);
 
-            // 1초마다 경과 시간 표시
-            setInterval(function () {
-                if (start_time && !end_time) {
-                    var current_time = new Date();
-                    var time_diff = current_time - start_time;
-                    timerDiv.innerHTML = "Timer: " + Math.floor(time_diff / 1000) + " seconds";
-                }
-            }, 1000);
+                request.onsuccess = function (event) {
+                    resultDiv.innerHTML = "Results saved successfully!";
+                };
 
-            // 타자 속도 계산 함수
-            function calculateTypingSpeed(time) {
-                var wordsTyped = document.getElementById("typed-text").value.trim().split(" ").length;
-                var minutes = time / 60000; // milliseconds to minutes
-                var typing_speed = Math.round(wordsTyped / minutes);
-                return typing_speed;
+                request.onerror = function (event) {
+                    resultDiv.innerHTML = "Error saving results";
+                };
             }
 
-            // 초기화
             given_text = quotes[Math.floor(Math.random() * quotes.length)];
             sentenceDiv.innerHTML = given_text;
         </script>
